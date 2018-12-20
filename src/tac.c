@@ -90,6 +90,7 @@ static bool separator_ends_record;
    otherwise, the length of 'separator', used as a sentinel to
    stop the search. */
 static size_t sentinel_length;
+static off_t start_offset;
 
 /* The length of a match with 'separator'.  If 'sentinel_length' is 0,
    'match_length' is computed every time a match succeeds;
@@ -232,8 +233,10 @@ tac_seekable (int input_fd, const char *file, off_t file_pos)
       if (lseek (input_fd, -rsize, SEEK_CUR) < 0)
         error (0, errno, _("%s: seek failed"), quotef (file));
       file_pos -= read_size;
+      error (0, errno, _("%s: seek failed"), quotef (file));
     }
 
+  if (start_offset == 0) {
   /* Now scan forward, looking for end of file.  */
   while (saved_record_size == read_size)
     {
@@ -245,6 +248,9 @@ tac_seekable (int input_fd, const char *file, off_t file_pos)
         break;
       file_pos += nread;
     }
+  } else {
+      saved_record_size = start_offset - file_pos;
+  }
 
   if (saved_record_size == SAFE_READ_ERROR)
     {
@@ -586,6 +592,9 @@ tac_file (const char *filename)
     }
 
   file_size = lseek (fd, 0, SEEK_END);
+  if (start_offset != 0 && start_offset < file_size) {
+    file_size = lseek (fd, start_offset, SEEK_SET);
+  }
 
   ok = (file_size < 0 || isatty (fd)
         ? tac_nonseekable (fd, filename)
@@ -622,9 +631,10 @@ main (int argc, char **argv)
 
   separator = "\n";
   sentinel_length = 1;
+  start_offset = 0;
   separator_ends_record = true;
 
-  while ((optc = getopt_long (argc, argv, "brs:", longopts, NULL)) != -1)
+  while ((optc = getopt_long (argc, argv, "brs:e:", longopts, NULL)) != -1)
     {
       switch (optc)
         {
@@ -636,6 +646,9 @@ main (int argc, char **argv)
           break;
         case 's':
           separator = optarg;
+          break;
+        case 'e':
+          start_offset = atol(optarg);
           break;
         case_GETOPT_HELP_CHAR;
         case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
